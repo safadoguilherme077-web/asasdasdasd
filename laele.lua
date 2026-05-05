@@ -1,7 +1,8 @@
 -- 🔐 KEY SYSTEM ONLINE
 local HttpService = game:GetService("HttpService")
 
-local KEYS_URL = "https://raw.githubusercontent.com/safadoguilherme077-web/akiescirpt/main/key.json"
+-- 🔥 SEU DOMÍNIO DO RAILWAY AQUI
+local KEYS_URL = "https://akiescirpt-production.up.railway.app/keys"
 
 local function getKeys()
     local success, result = pcall(function()
@@ -11,6 +12,7 @@ local function getKeys()
     if success then
         return result
     else
+        warn("Erro ao pegar keys")
         return {}
     end
 end
@@ -275,7 +277,7 @@ RunService.RenderStepped:Connect(function()
 
 end)
 
--- 🔼🔼🔼 SEU SCRIPT TERMINA AQUI 🔼🔼🔼
+-- 🔼🔼🔼 FIM 🔼🔼🔼
 end
 
 ---------------------------------------------------
