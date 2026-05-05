@@ -7,17 +7,14 @@ local function getKeys()
     local success, result = pcall(function()
         return HttpService:JSONDecode(game:HttpGet(KEYS_URL))
     end)
-
     return success and result or {}
 end
 
 local function verificarKey(key, Keys)
     local data = Keys[key]
-
     if not data then return "invalid" end
     if data == "perm" then return "valid" end
     if os.time()*1000 > data then return "expired" end
-
     return "valid"
 end
 
@@ -64,7 +61,7 @@ local settings = {
     ESP = true,
     AimAssist = false,
     WallCheck = true,
-    AimStrength = 0.12,
+    AimStrength = 0.2, -- 🔥 aumentei pra funcionar melhor
     FOV = 120,
     TeamCheck = true,
 
@@ -74,7 +71,7 @@ local settings = {
     HeroFly = false,
     HeroSpeed = 200,
 
-    AlignToCamera = true -- 🔥 FIX ROTAÇÃO
+    AlignToCamera = true
 }
 
 local aiming = false
@@ -93,9 +90,6 @@ local Window = Rayfield:CreateWindow({
 local CombatTab = Window:CreateTab("Combat")
 local MoveTab = Window:CreateTab("Movement")
 
----------------------------------------------------
--- ⚔️ COMBAT
----------------------------------------------------
 CombatTab:CreateToggle({
     Name = "👁️ ESP",
     CurrentValue = true,
@@ -124,7 +118,7 @@ CombatTab:CreateSlider({
     Name = "💪 Aim Strength",
     Range = {0,1},
     Increment = 0.01,
-    CurrentValue = 0.12,
+    CurrentValue = 0.2,
     Callback = function(v) settings.AimStrength = v end
 })
 
@@ -136,18 +130,8 @@ CombatTab:CreateSlider({
     Callback = function(v) settings.FOV = v end
 })
 
-CombatTab:CreateButton({
-    Name = "🧹 Clear ESP",
-    Callback = function()
-        for _, hl in pairs(highlights) do
-            if hl then hl:Destroy() end
-        end
-        table.clear(highlights)
-    end
-})
-
 ---------------------------------------------------
--- ✈️ MOVEMENT
+-- MOVEMENT
 ---------------------------------------------------
 MoveTab:CreateToggle({
     Name = "✈️ Fly",
@@ -156,14 +140,6 @@ MoveTab:CreateToggle({
         settings.Fly = v
         if v then settings.HeroFly = false end
     end
-})
-
-MoveTab:CreateSlider({
-    Name = "⚡ Fly Speed",
-    Range = {20,200},
-    Increment = 5,
-    CurrentValue = 50,
-    Callback = function(v) settings.FlySpeed = v end
 })
 
 MoveTab:CreateToggle({
@@ -175,14 +151,6 @@ MoveTab:CreateToggle({
     end
 })
 
-MoveTab:CreateSlider({
-    Name = "🚀 Hero Speed",
-    Range = {50,500},
-    Increment = 10,
-    CurrentValue = 200,
-    Callback = function(v) settings.HeroSpeed = v end
-})
-
 MoveTab:CreateToggle({
     Name = "🔄 Align To Camera",
     CurrentValue = true,
@@ -192,7 +160,7 @@ MoveTab:CreateToggle({
 })
 
 ---------------------------------------------------
--- 🎯 TEAM CHECK
+-- TEAM CHECK
 ---------------------------------------------------
 local function isEnemy(plr)
     if not settings.TeamCheck then return true end
@@ -201,7 +169,7 @@ local function isEnemy(plr)
 end
 
 ---------------------------------------------------
--- 🎯 AIM
+-- INPUT AIM
 ---------------------------------------------------
 UserInputService.InputBegan:Connect(function(i)
     if i.UserInputType == Enum.UserInputType.MouseButton2 then
@@ -215,53 +183,45 @@ UserInputService.InputEnded:Connect(function(i)
     end
 end)
 
+---------------------------------------------------
+-- 🔥 VISIBILITY FIX (IMPORTANTE)
+---------------------------------------------------
 local function isVisible(part)
     if not settings.WallCheck then return true end
 
-    local result = Workspace:Raycast(
-        Camera.CFrame.Position,
-        (part.Position - Camera.CFrame.Position),
-        RaycastParams.new()
-    )
+    local origin = Camera.CFrame.Position
+    local direction = (part.Position - origin)
+
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Blacklist
+    params.FilterDescendantsInstances = {LP.Character}
+
+    local result = Workspace:Raycast(origin, direction, params)
 
     return not result or result.Instance:IsDescendantOf(part.Parent)
-end
-
----------------------------------------------------
--- ESP
----------------------------------------------------
-local function createESP(char)
-    if highlights[char] then return end
-
-    local hl = Instance.new("Highlight")
-    hl.FillColor = Color3.fromRGB(255,60,60)
-    hl.Parent = char
-
-    highlights[char] = hl
-end
-
-local function removeESP(char)
-    if highlights[char] then
-        highlights[char]:Destroy()
-        highlights[char] = nil
-    end
 end
 
 ---------------------------------------------------
 -- TARGET
 ---------------------------------------------------
 local function getClosestTarget()
-    local closest, dist = nil, math.huge
+    local closest = nil
+    local shortest = math.huge
 
-    for _, plr in pairs(Players:GetPlayers()) do
+    local mousePos = UserInputService:GetMouseLocation()
+
+    for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= LP and plr.Character and isEnemy(plr) then
             local head = plr.Character:FindFirstChild("Head")
+
             if head and isVisible(head) then
                 local pos, onScreen = Camera:WorldToViewportPoint(head.Position)
+
                 if onScreen then
-                    local mag = (Vector2.new(pos.X,pos.Y) - UserInputService:GetMouseLocation()).Magnitude
-                    if mag < dist and mag <= settings.FOV then
-                        dist = mag
+                    local dist = (Vector2.new(pos.X,pos.Y) - mousePos).Magnitude
+
+                    if dist < shortest and dist <= settings.FOV then
+                        shortest = dist
                         closest = head
                     end
                 end
@@ -273,6 +233,21 @@ local function getClosestTarget()
 end
 
 ---------------------------------------------------
+-- 🔥 AIM FIXADO
+---------------------------------------------------
+local function applyAim()
+    local target = getClosestTarget()
+    if not target then return end
+
+    local camPos = Camera.CFrame.Position
+    local direction = (target.Position - camPos).Unit
+
+    local newCF = CFrame.new(camPos, camPos + direction)
+
+    Camera.CFrame = Camera.CFrame:Lerp(newCF, settings.AimStrength)
+end
+
+---------------------------------------------------
 -- LOOP
 ---------------------------------------------------
 RunService.RenderStepped:Connect(function()
@@ -280,26 +255,9 @@ RunService.RenderStepped:Connect(function()
     local char = LP.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
 
-    -- ESP
-    for _, plr in pairs(Players:GetPlayers()) do
-        if plr ~= LP and plr.Character and isEnemy(plr) then
-            if settings.ESP then
-                createESP(plr.Character)
-            else
-                removeESP(plr.Character)
-            end
-        end
-    end
-
     -- AIM
     if settings.AimAssist and aiming then
-        local t = getClosestTarget()
-        if t then
-            Camera.CFrame = Camera.CFrame:Lerp(
-                CFrame.new(Camera.CFrame.Position, t.Position),
-                settings.AimStrength
-            )
-        end
+        pcall(applyAim)
     end
 
     -- FLY
@@ -320,7 +278,6 @@ RunService.RenderStepped:Connect(function()
             root.Velocity = move * settings.HeroSpeed
         end
 
-        -- 🔥 FIX ROTAÇÃO (NÃO FICA DE COSTAS)
         if settings.AlignToCamera then
             root.CFrame = CFrame.new(root.Position, root.Position + cam.LookVector)
         end
@@ -347,7 +304,6 @@ KeyTab:CreateButton({
             })
 
             startScript()
-
         else
             Rayfield:Notify({
                 Title = "Erro",
